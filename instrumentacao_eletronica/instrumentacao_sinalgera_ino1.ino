@@ -1,5 +1,4 @@
 /*
-  Arquivo: gerador_sinais_v5.ino
   Projeto: Gerador de Sinais Interativo com Filtros (LCD/Keypad)
   Grupo: Anderson, Hiarley, Yuri
   Disciplina: Instrumentação Eletrônica
@@ -21,8 +20,8 @@ const byte COLS = 4;
 char keys[ROWS][COLS] = {
   {'1','2','3','A'},
   {'4','5','6','B'},
-  {'7','8','9','C'},   // C será usado para apagar
-  {'*','0','#','D'}    // * = ponto decimal / D = voltar
+  {'7','8','9','C'},
+  {'*','0','#','D'}
 };
 byte rowPins[ROWS] = {10, 9, 8, 7};
 byte colPins[COLS] = {A3, A2, A1, A0};
@@ -150,8 +149,6 @@ void mostrarMenu() {
 
 // ====================== PROCESSAMENTO DE TECLAS ======================
 void processarKey(char key) {
-
-  // MENU PRINCIPAL
   if (estado_menu == MENU_PRINCIPAL) {
     if (key >= '1' && key <= '3') {
       tipo_sinal = key - '0';
@@ -162,7 +159,6 @@ void processarKey(char key) {
     return;
   }
 
-  // SELEÇÃO DE FILTRO
   if (estado_menu == SELECAO_FILTRO) {
     if (key >= '1' && key <= '4') {
       tipo_filtro = key - '0';
@@ -173,7 +169,6 @@ void processarKey(char key) {
     return;
   }
 
-  // TECLA PARA APAGAR (BACKSPACE)
   if (key == 'C') {
     if (inputBuffer.length() > 0) {
       inputBuffer.remove(inputBuffer.length() - 1);
@@ -182,7 +177,6 @@ void processarKey(char key) {
     return;
   }
 
-  // DIGITAÇÃO DE NÚMEROS
   if (key >= '0' && key <= '9') {
     if (inputBuffer.length() < 8) {
       inputBuffer += key;
@@ -191,7 +185,6 @@ void processarKey(char key) {
     return;
   }
 
-  // PONTO DECIMAL
   if (key == '*') {
     if (inputBuffer.indexOf('.') == -1 && inputBuffer.length() < 7) {
       inputBuffer += '.';
@@ -200,7 +193,6 @@ void processarKey(char key) {
     return;
   }
 
-  // CONFIRMAR
   if (key == '#') {
     if (inputBuffer.length() == 0) return;
     float valor = inputBuffer.toFloat();
@@ -210,40 +202,30 @@ void processarKey(char key) {
         amplitude_sinal = valor;
         if (tipo_sinal == 1) estado_menu = ENTRADA_RUIDO;
         else estado_menu = ENTRADA_FREQ_SINAL;
-      } else {
-        lcd.clear(); lcd.print("Amp 0-5V!"); delay(1000);
       }
     }
     else if (estado_menu == ENTRADA_FREQ_SINAL) {
       if (valor > 0 && valor <= 400) {
         freq_sinal = valor;
         estado_menu = (tipo_sinal == 3) ? ENTRADA_CICLO_ATIVO : ENTRADA_RUIDO;
-      } else {
-        lcd.clear(); lcd.print("Freq 1-400Hz!"); delay(1000);
       }
     }
     else if (estado_menu == ENTRADA_CICLO_ATIVO) {
       if (valor >= 0 && valor <= 100) {
         ciclo_ativo = valor;
         estado_menu = ENTRADA_RUIDO;
-      } else {
-        lcd.clear(); lcd.print("0-100%!"); delay(1000);
       }
     }
     else if (estado_menu == ENTRADA_RUIDO) {
       if (valor >= 0 && valor <= 1.0) {
         intensidade_ruido = valor;
         estado_menu = SELECAO_FILTRO;
-      } else {
-        lcd.clear(); lcd.print("Ruido 0-1!"); delay(1000);
       }
     }
     else if (estado_menu == ENTRADA_FC) {
       if (valor > 0 && valor < 500) {
         freq_corte_rad = 2.0 * PI * valor;
         estado_menu = GERANDO_DADOS;
-      } else {
-        lcd.clear(); lcd.print("Fc >0!"); delay(1000);
       }
     }
 
@@ -252,7 +234,6 @@ void processarKey(char key) {
     return;
   }
 
-  // VOLTAR
   if (key == 'D') {
     inputBuffer = "";
     estado_menu = MENU_PRINCIPAL;
@@ -292,16 +273,19 @@ float filtro_lpf_1ordem(float x, float wc, float &y_prev) {
   y_prev = y;
   return y;
 }
+
 float filtro_hpf_1ordem(float x, float wc, float &y_lpf_prev) {
   float lpf = filtro_lpf_1ordem(x, wc, y_lpf_prev);
   return x - lpf;
 }
+
 float filtro_bpf(float x, float fc, float &y_hpf_prev, float &y_lpf_prev) {
   float fc_low = fc*0.9;
   float fc_high = fc*1.1;
   float hpf = filtro_hpf_1ordem(x, fc_low, y_hpf_prev);
   return filtro_lpf_1ordem(hpf, fc_high, y_lpf_prev);
 }
+
 float filtro_bsf(float x, float fc, float &y_hpf_prev, float &y_lpf_prev) {
   return x - filtro_bpf(x, fc, y_hpf_prev, y_lpf_prev);
 }
@@ -324,22 +308,25 @@ void exportarDados() {
   y_anterior_bsf_hpf = y_anterior_bsf_lpf = 0.0;
 
   Serial.println("\n--- INICIO EXPORTACAO ---");
-  Serial.println("Sinal_Original(V)\tSinal_Filtrado(V)");
+  Serial.println("Sinal_Original(V),Sinal_Filtrado(V)");
 
   for(int i=0;i<NUM_AMOSTRAS;i++){
-    float s_base=gerarSinalBase(i);
-    float s_noisy=adicionarRuido(s_base);
-    float s_filt=aplicarFiltro(s_noisy);
+    float s_base = gerarSinalBase(i);
+    float s_noisy = adicionarRuido(s_base);
+    float s_filt = aplicarFiltro(s_noisy);
 
     int pwm = (int)(s_noisy*51.0);
     analogWrite(PIN_PWM,constrain(pwm,0,255));
 
+    // Apenas duas colunas: Original e Filtrado
     Serial.print(s_noisy,4);
-    Serial.print("\t");
+    Serial.print(",");
     Serial.println(s_filt,4);
 
     delay(T_AMOSTRAGEM_MS);
   }
+
+  Serial.println("--- FIM DE EXPORTACAO ---");
 
   lcd.clear();
   lcd.print("Concluido!");
